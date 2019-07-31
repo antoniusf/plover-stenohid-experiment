@@ -133,9 +133,11 @@ class QMK(ThreadedStenotypeBase):
                         packet = os.read(self._machine.fileno(), 8)
                 except IOError:
                     self._machine.close()
-                    log.warning(u'machine disconnected, reconnecting…')
+                    # TODO: the warnings seem to cause exceptions, I don't know why
+                    #log.warning(u'machine disconnected, reconnecting…')
                     if self._connect():
-                        log.warning('machine reconnected.')
+                        pass
+                        #log.warning('machine reconnected.')
                 else:
                     handler.update(packet)
 

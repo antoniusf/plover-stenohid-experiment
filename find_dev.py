@@ -1,23 +1,46 @@
 import pyudev
 import hiddev
 import select
+import time
 
 ctx = pyudev.Context()
 
 def check_device(device):
     """Checks if a given hiddev device belongs to a stenoHID interface. Returns True if it does, False otherwise."""
 
+    #print("hi")
+    #time.sleep(5)
+
     # check that it's actually an hid device
+    print("checking if it's an hid...", end="\t")
     interface = device.find_parent(subsystem="usb", device_type="usb_interface")
+
+    # this can happen if the device is unplugged in between
+    if interface is None:
+        print("error (device unplugged)")
+        return False
+    
     if interface["DRIVER"] != "usbhid":
+        print("no")
         return False
 
+    print("yes")
+
     # check the vendor and product IDs
+    print("checking if vendor and product IDs match...", end="\t")
     usb_device = interface.find_parent(subsystem="usb", device_type="usb_device")
-    print(usb_device["ID_MODEL_ID"])
-    if usb_device["ID_VENDOR_ID"] != "feed" or usb_device["ID_MODEL_ID"] != "1337":
-        print("id mismatch")
+
+    if usb_device is None:
+        print("error (device unplugged)")
         return False
+    
+    if not usb_device or usb_device["ID_VENDOR_ID"] != "feed" or usb_device["ID_MODEL_ID"] != "1337":
+        print("no (device IDs were 0x{}, 0x{})".format(usb_device["ID_VENDOR_ID"], usb_device["ID_MODEL_ID"]))
+        return False
+
+    print("yes")
+
+    print("checking if it has the correct usage...", end="\t")
 
     fname = device["DEVNAME"]
 
@@ -31,9 +54,10 @@ def check_device(device):
         print("found device with usage {:04x}".format(info.usage))
 
         if info.usage != 0xff020001:
-            print("usage mismatch")
+            print("no")
             return False
 
+    print("yes")
     return True
 
 def find_devices():
