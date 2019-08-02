@@ -1,7 +1,8 @@
 import pyudev
-import hiddev
 import select
 import time
+
+from . import hiddev
 
 ctx = pyudev.Context()
 

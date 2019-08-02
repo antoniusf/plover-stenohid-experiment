@@ -9,11 +9,11 @@
 from time import sleep
 
 import pyudev
-import hiddev
 import os
 import select
-from find_dev import wait_for_device
 import struct
+
+from .find_dev import wait_for_device
 
 from plover import log
 from plover.machine.base import ThreadedStenotypeBase
