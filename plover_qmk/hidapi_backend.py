@@ -94,10 +94,10 @@ class QMK(ThreadedStenotypeBase):
             # support it.
             interface_path = None
             for device in hid.enumerate(VENDOR_ID, PRODUCT_ID):
-                #if device["usage_page"] == USAGE_PAGE and device["usage"] == USAGE:
                 # TESTING only; usage_page and usage do not work on linux, so I'm
                 # hardcoding the interface
-                if device["interface_number"] == 0:
+                #if device["interface_number"] == 0:
+                if device["usage_page"] == USAGE_PAGE and device["usage"] == USAGE:
                     # This is the steno interface!
                     interface_path = device["path"]
                     break
