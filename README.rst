@@ -1,6 +1,4 @@
-Plover Tréal
+Let's make a steno HID protocol!
 ============
 
-Add support for the `Tréal <http://www.wordtechnologies.com/products_main.asp?shx=treal>`_ stenotype to `Plover <http://www.openstenoproject.org/>`_:
-
-.. image:: http://www.wordtechnologies.com/images/treal/treal2a.gif
+This is the plover plugin for the protocol. Based on Ted Morin's Tréal plugin here: https://github.com/morinted/plover-treal/.

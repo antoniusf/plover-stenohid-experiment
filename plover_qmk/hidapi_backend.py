@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2013 Hesky Fisher
+# Copyright (c) 2013-2019 Hesky Fisher, Antonius Frie
 # See LICENSE.txt for details.
 
 # TODO: add tests
