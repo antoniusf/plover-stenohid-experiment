@@ -1,6 +1,7 @@
 import pyudev
 import select
 import time
+import os
 
 from plover import log
 
@@ -11,7 +12,9 @@ ctx = pyudev.Context()
 # TODO: make all lookups get()s, because apparently these attributes can disappear sometimes
 
 def check_device(device):
-    """Checks if a given hiddev device belongs to a stenoHID interface. Returns True if it does, False otherwise."""
+    """Checks if a given hiddev device belongs to a stenoHID interface. If yes, it
+    returns the opened device file descriptor. Otherwise, returns None.
+    """
 
     # check that it's actually an hid device
     print("checking if it's an hid...", end="\t")
@@ -50,37 +53,45 @@ def check_device(device):
     # we have to actually open the device for this
     # (we'll only check collection 0)
     try:
-        with open(fname, "rb") as f:
-
-            info = hiddev.hiddev_collection_info()
-            info.get_info(f.fileno(), index=0)
-
-            print("found device with usage {:04x}".format(info.usage))
-
-            if info.usage != 0xff020001:
-                print("no")
-                return False
-
-    # FileNotFoundError can be thrown by open()
-    # OSError can be thrown by the ioctl inside of info.get_info
-    except (FileNotFoundError, OSError):
+        fd = os.open(fname, os.O_RDONLY)
+    except FileNotFoundError:
         print("error (device unplugged)")
-        return False
+        return None
+
+    try:
+        info = hiddev.hiddev_collection_info()
+        info.get_info(fd, index=0)
+    # OSError can be thrown by the ioctl inside of info.get_info
+    except OSError:
+        # close the fd in this case
+        # we can't use a `finally` for this, because if everything works, we need to return the opened fd, and the finally
+        # would get in the way of that.
+        os.close(fd)
+        print("error (device unplugged)")
+        return None
+
+    print("found device with usage {:04x}".format(info.usage))
+
+    if info.usage != 0xff020001:
+        os.close(fd)
+        print("no")
+        return None
 
     print("hi")
     time.sleep(5)
 
     print("yes")
-    return True
+    return fd
 
 def find_devices():
 
     # usbmisc is where the hiddev devices appear to sit
     for device in ctx.list_devices(subsystem="usbmisc"):
 
-        if check_device(device):
+        device_fd = check_device(device)
+        if device_fd:
             # we've found our device!
-            return device
+            return device_fd
 
     # we've found nothing...
     return None
@@ -94,10 +105,10 @@ def wait_for_device(finished_notify_fd):
     monitor.start()
 
     # do the initial scan
-    device = find_devices()
+    device_fd = find_devices()
 
-    if device is not None:
-        return device["DEVNAME"]
+    if device_fd:
+        return device_fd
 
     # start polling the monitor
     while True:
@@ -121,8 +132,9 @@ def wait_for_device(finished_notify_fd):
             continue
 
         # check if this is a stenoHID interface
-        if check_device(device):
-            return device["DEVNAME"]
+        device_fd = check_device(device)
+        if device_fd:
+            return device_fd
 
 if __name__ == "__main__":
     import sys

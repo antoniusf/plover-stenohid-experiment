@@ -64,7 +64,6 @@ class DataHandler(object):
             if self._pressed == set() and self._stroke != set():
                 # all keys are up, process stroke
                 stroke = [STENO_KEY_CHART[idx] for idx in sorted(self._stroke)]
-                print(stroke)
                 self._callback(stroke)
 
                 # clear accumulated state
@@ -101,7 +100,7 @@ class QMK(ThreadedStenotypeBase):
         device = wait_for_device(self.finished_notify_recv)
 
         if device:
-            self._machine = open(device, "rb")
+            self._machine = device
             self._ready()
 
         return connected
@@ -123,21 +122,21 @@ class QMK(ThreadedStenotypeBase):
         self._connect()
 
         while not self.finished.isSet():
-            ready, _, _ = select.select([self._machine.fileno(), self.finished_notify_recv], [], [])
+            ready, _, _ = select.select([self._machine, self.finished_notify_recv], [], [])
             # (if this is not true, we got pulled out by self.finished_notify_recv. on the next run self.finished.isSet() will be false and break the loop.)
-            if self._machine.fileno() in ready:
+            if self._machine in ready:
 
                 try:
                         # 4 bytes usage, 4 bytes status (hiddev format)
                         # we need to use os.read here, because buffering and select do not play well together
-                        packet = os.read(self._machine.fileno(), 8)
+                        packet = os.read(self._machine, 8)
                 except IOError:
-                    self._machine.close()
+                    os.close(self._machine)
                     # TODO: the warnings seem to cause exceptions, I don't know why
-                    #log.warning(u'machine disconnected, reconnecting…')
+                    log.warning(u'machine disconnected, reconnecting…')
                     if self._connect():
                         pass
-                        #log.warning('machine reconnected.')
+                        log.warning('machine reconnected.')
                 else:
                     handler.update(packet)
 
@@ -156,7 +155,11 @@ class QMK(ThreadedStenotypeBase):
         if self.finished_notify_recv:
             os.close(self.finished_notify_recv)
             os.close(self.finished_notify_send)
+            self.finished_notify_recv = None
+            self.finished_notify_send = None
 
         if self._machine:
-            self._machine.close()
+            os.close(self._machine)
+            self._machine = None
+
         self._stopped()
