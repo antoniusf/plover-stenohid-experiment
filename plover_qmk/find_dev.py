@@ -2,15 +2,16 @@ import pyudev
 import select
 import time
 
+from plover import log
+
 from . import hiddev
 
 ctx = pyudev.Context()
 
+# TODO: make all lookups get()s, because apparently these attributes can disappear sometimes
+
 def check_device(device):
     """Checks if a given hiddev device belongs to a stenoHID interface. Returns True if it does, False otherwise."""
-
-    #print("hi")
-    #time.sleep(5)
 
     # check that it's actually an hid device
     print("checking if it's an hid...", end="\t")
@@ -48,15 +49,26 @@ def check_device(device):
     # check the application usage page
     # we have to actually open the device for this
     # (we'll only check collection 0)
-    with open(fname, "rb") as f:
-        info = hiddev.hiddev_collection_info()
-        info.get_info(f.fileno(), index=0)
+    try:
+        with open(fname, "rb") as f:
 
-        print("found device with usage {:04x}".format(info.usage))
+            info = hiddev.hiddev_collection_info()
+            info.get_info(f.fileno(), index=0)
 
-        if info.usage != 0xff020001:
-            print("no")
-            return False
+            print("found device with usage {:04x}".format(info.usage))
+
+            if info.usage != 0xff020001:
+                print("no")
+                return False
+
+    # FileNotFoundError can be thrown by open()
+    # OSError can be thrown by the ioctl inside of info.get_info
+    except (FileNotFoundError, OSError):
+        print("error (device unplugged)")
+        return False
+
+    print("hi")
+    time.sleep(5)
 
     print("yes")
     return True
