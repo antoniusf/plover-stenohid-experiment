@@ -17,35 +17,36 @@ def check_device(device):
     """
 
     # check that it's actually an hid device
-    print("checking if it's an hid...", end="\t")
+    log.debug("checking device...")
+    log.debug("checking if it's an hid...")
     interface = device.find_parent(subsystem="usb", device_type="usb_interface")
 
     # this can happen if the device is unplugged in between
     if interface is None:
-        print("error (device unplugged)")
+        log.debug("error (device unplugged)")
         return False
     
     if interface["DRIVER"] != "usbhid":
-        print("no")
+        log.debug("no")
         return False
 
-    print("yes")
+    log.debug("... yes")
 
     # check the vendor and product IDs
-    print("checking if vendor and product IDs match...", end="\t")
+    log.debug("checking if vendor and product IDs match...")
     usb_device = interface.find_parent(subsystem="usb", device_type="usb_device")
 
     if usb_device is None:
-        print("error (device unplugged)")
+        log.debug("error (device unplugged)")
         return False
     
     if not usb_device or usb_device["ID_VENDOR_ID"] != "feed" or usb_device["ID_MODEL_ID"] != "1337":
-        print("no (device IDs were 0x{}, 0x{})".format(usb_device["ID_VENDOR_ID"], usb_device["ID_MODEL_ID"]))
+        log.debug("no (device IDs were 0x{}, 0x{})".format(usb_device["ID_VENDOR_ID"], usb_device["ID_MODEL_ID"]))
         return False
 
-    print("yes")
+    log.debug("... yes")
 
-    print("checking if it has the correct usage...", end="\t")
+    log.debug("checking if it has the correct usage...")
 
     fname = device["DEVNAME"]
 
@@ -55,7 +56,7 @@ def check_device(device):
     try:
         fd = os.open(fname, os.O_RDONLY)
     except FileNotFoundError:
-        print("error (device unplugged)")
+        log.debug("error (device unplugged)")
         return None
 
     try:
@@ -67,20 +68,17 @@ def check_device(device):
         # we can't use a `finally` for this, because if everything works, we need to return the opened fd, and the finally
         # would get in the way of that.
         os.close(fd)
-        print("error (device unplugged)")
+        log.debug("error (device unplugged)")
         return None
 
-    print("found device with usage {:04x}".format(info.usage))
+    log.debug("... usage is 0x{:04x}".format(info.usage))
 
     if info.usage != 0xff020001:
         os.close(fd)
-        print("no")
+        log.debug("... no")
         return None
 
-    print("hi")
-    time.sleep(5)
-
-    print("yes")
+    log.debug("... yes")
     return fd
 
 def find_devices():
@@ -122,12 +120,14 @@ def wait_for_device(finished_notify_fd):
         if not device:
             continue
 
+        log.debug("found a new device")
+
         # check if the subsystem is actually correct
         if device["SUBSYSTEM"] != "usbmisc":
             continue
 
         # check if the device was plugged in
-        print(device.action)
+        log.debug("device action was \"{}\"".format(device.action))
         if device.action != "add":
             continue
 
