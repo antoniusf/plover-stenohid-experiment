@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2013 Hesky Fisher
+# Copyright (c) 2019 Antonius Frie: Rewrite for use with the hiddev interface, modify protocol format.
 # See LICENSE.txt for details.
 
 # TODO: add tests
 
-"Thread-based monitoring of a stenotype machine using the Treal machine."
+"Thread-based monitoring of a QMK-based stenotype machine, linux hiddev backend."
 
 from time import sleep
 
@@ -132,7 +133,6 @@ class QMK(ThreadedStenotypeBase):
                         packet = os.read(self._machine, 8)
                 except IOError:
                     os.close(self._machine)
-                    # TODO: the warnings seem to cause exceptions, I don't know why
                     log.warning(u'machine disconnected, reconnecting…')
                     if self._connect():
                         pass

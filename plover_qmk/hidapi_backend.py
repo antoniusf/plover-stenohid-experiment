@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2013-2019 Hesky Fisher, Antonius Frie
+# Copyright (c) 2013 Hesky Fisher
 # See LICENSE.txt for details.
 
 # TODO: add tests
 
-"Thread-based monitoring of a stenotype machine using the Treal machine."
+"Thread-based monitoring of a QMK-based stenotype machine, hidapi backend"
 
 from time import sleep
 
@@ -142,9 +142,9 @@ class QMK(ThreadedStenotypeBase):
                 packet = self._machine.read(PACKET_LENGTH, 100)
             except IOError:
                 self._machine.close()
-                log.warning(u'Treal disconnected, reconnecting…')
+                log.warning(u'machine disconnected, reconnecting…')
                 if self._connect():
-                    log.warning('Treal reconnected.')
+                    log.warning('machine reconnected.')
             else:
                 if len(packet) == PACKET_LENGTH:
                     handler.update(packet)
