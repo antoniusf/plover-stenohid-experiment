@@ -123,6 +123,10 @@ class QMK(ThreadedStenotypeBase):
         self._connect()
 
         while not self.finished.isSet():
+            # TODO: self.finished.isSet should only be true if self._connect() returned an actual fd,
+            # since the only way of returning from wait_for_device without an fd is when we get the finished
+            # notification, meaning that finished should be set. However, this is a bit wonky and should probably
+            # be more explicit.
             ready, _, _ = select.select([self._machine, self.finished_notify_recv], [], [])
             # (if this is not true, we got pulled out by self.finished_notify_recv. on the next run self.finished.isSet() will be false and break the loop.)
             if self._machine in ready:
@@ -133,6 +137,7 @@ class QMK(ThreadedStenotypeBase):
                         packet = os.read(self._machine, 8)
                 except IOError:
                     os.close(self._machine)
+                    self._machine = None # unset the machine fd after closing
                     log.warning(u'machine disconnected, reconnecting…')
                     if self._connect():
                         pass
