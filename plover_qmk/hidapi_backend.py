@@ -142,6 +142,7 @@ class QMK(ThreadedStenotypeBase):
                 packet = self._machine.read(PACKET_LENGTH, 100)
             except IOError:
                 self._machine.close()
+                self._machine = None
                 log.warning(u'machine disconnected, reconnecting…')
                 if self._connect():
                     log.warning('machine reconnected.')
