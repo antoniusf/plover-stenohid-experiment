@@ -60,8 +60,7 @@ def check_device(device):
         return None
 
     try:
-        info = hiddev.hiddev_collection_info()
-        info.get_info(fd, index=0)
+        info = hiddev.HIDDevice(fd).get_collection_info(index=0)
     # OSError can be thrown by the ioctl inside of info.get_info
     except OSError:
         # close the fd in this case

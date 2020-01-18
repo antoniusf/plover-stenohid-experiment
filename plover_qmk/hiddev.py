@@ -1,242 +1,192 @@
 #!/usr/bin/python
 #
-# This code was published by Dima Tisnek, licensed under the MIT License, here: https://github.com/dimaqq/recipes/blob/master/hiddev.py .
-# Originally, it was posted as http://code.activestate.com/recipes/576834-interrogating-linux-devusbhiddev0-in-python/ .
-#
-# In order to comply with the license, the text of the MIT License was
-# added to this file, since it was not present in the original. A
-# copyright notice was also not present, but it was not added here.
-
-# Permission is hereby granted, free of charge, to any person obtaining
-# a copy of this software and associated documentation files (the
-# "Software"), to deal in the Software without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish,
-# distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so, subject to
-# the following conditions:
-#
-# The above copyright notice and this permission notice shall be
-# included in all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
-# BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
-# ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# This code is based on work by Dima Tisnek, released here: https://github.com/dimaqq/recipes/blob/master/hiddev.py .
+# It was almost completely rewritten by me (Antonius Frie) in January of 2020; the only parts of the original code
+# that remain untouched are the four IOC constants, as well as the FIX function. This code still has some similarities to the
+# original, but these are almost exclusively due to the fact that both use the same API.
 
 import struct, array, fcntl
+from collections import namedtuple as _namedtuple
 
-class struxx:
-  _fields = None
-  _format = None
-  _buffer = None
-  def __init__(self):
-    self.reset()
 
-  def __len__(self):
-    """binary represntation length, for fields, use __dict__ or something"""
-    return struct.calcsize(self._format)
+# namedtuple only added defaults in python3.7, so we're doing our own version here
 
-  def __iter__(self):
-    return [getattr(self, field) for field in self._fields.split(";")].__iter__()
 
-  def reset(self):
-    for field in self._fields.split(";"):
-      setattr(self, field, 0)
-    self._buffer = array.array('B', [0]*len(self))
+def namedtuple(typename, field_names, rename=False, defaults=None):
 
-  def pack(self):
-    self._buffer = array.array('B', struct.pack(self._format, *self))
+    tupletype = _namedtuple(typename, field_names, rename=rename)
 
-  def unpack(self):
-    rv = struct.unpack(self._format, self._buffer)
-    for i in range(len(rv)):
-      setattr(self, self._fields.split(";")[i], rv[i])
+    # patch the defaults into the type's "__new__"
+    # this is exactly the same thing that namedtuple does internally
+    # please don't ask me how it works
+    if defaults is not None:
+        tupletype.__new__.__defaults__ = tuple(defaults)
 
-  def ioctl(self, fd, ioctlno):
-    self.pack()
-    rv = fcntl.ioctl(fd, ioctlno, self._buffer, True)
-    self.unpack()
-    return rv
+    return tupletype
 
-class uint(struxx):
-  _fields = "uint"
-  _format = "I"
-  def get_version(self, fd): return self.ioctl(fd, HIDIOCGVERSION)
-  def get_flags(self, fd): return self.ioctl(fd, HIDIOCGFLAG)
-  def set_flags(self, fd): return self.ioctl(fd, HIDIOCSFLAG)
 
-class hiddev_devinfo(struxx):
-  _fields = "bustype;busnum;devnum;ifnum;vendor;product;version;num_applications"
-  _format = "IIIIhhhI"
-  def get(self, fd): return self.ioctl(fd, HIDIOCGDEVINFO)
+StructInfo = namedtuple("StructInfo", ["tupletype", "fmt"])
 
-class hiddev_string_descriptor(struxx):
-  _fields = "index;value"
-  _format = "i256c"
+# See <linux/hiddev.h> for the original definitions of these structs
+# TODO: use a ctypes Structure for this instead??
 
-  def reset(self):
-    self.index = 0
-    self.value = '\0'*256
+hiddev_u32 = StructInfo(
+    tupletype=namedtuple("hiddev_u32", ["value"], defaults=[0]), fmt=struct.Struct("I")
+)
 
-  def pack(self):
-    tmp = struct.pack("i", self.index) + self.value[:256].ljust(256, '\0')
-    self._buffer = array.array('B', tmp)
+hiddev_buffer = StructInfo(
+    tupletype=namedtuple("hiddev_buffer", ["data"], defaults=[bytes()]),
+    fmt=struct.Struct("256s"),
+)
 
-  def unpack(self):
-    self.index = struct.unpack("i", self._buffer[:4])
-    self.value = self._buffer[4:].tostring()
+hiddev_devinfo = StructInfo(
+    tupletype=namedtuple(
+        "hiddev_devinfo",
+        [
+            "bustype",
+            "busnum",
+            "devnum",
+            "ifnum",
+            "vendor",
+            "product",
+            "version",
+            "num_applications",
+        ],
+        defaults=[0, 0, 0, 0, 0, 0, 0, 0],
+    ),
+    fmt=struct.Struct("IIIIhhhI"),
+)
 
-  def get_string(self, fd, idx):
-    self.index = idx
-    return self.ioctl(fd, HIDIOCGSTRING)
+hiddev_collection_info = StructInfo(
+    tupletype=namedtuple(
+        "hiddev_collection_info",
+        ["index", "type", "usage", "level"],
+        defaults=[0, 0, 0, 0],
+    ),
+    fmt=struct.Struct("IIII"),
+)
 
-class hiddev_report_info(struxx):
-  _fields = "report_type;report_id;num_fields"
-  _format = "III"
-  def get_info(self, fd): return self.ioctl(fd, HIDIOCGREPORTINFO)
+hiddev_string_descriptor = StructInfo(
+    tupletype=namedtuple(
+        "hiddev_string_descriptor", ["index", "value"], defaults=[0, bytes()]
+    ),
+    fmt=struct.Struct("i256s"),
+)
 
-class hiddev_field_info(struxx):
-  _fields = "report_type;report_id;field_index;maxusage;flags;physical;logical;application;logical_minimum;logical_maximum;physical_minimum;physical_maximum;unit_exponent;unit"
-  _format = "I"*8+"i"*4+"II"
-  def get_info(self, fd): return self.ioctl(fd, HIDIOCGFIELDINFO)
+hiddev_report_info = StructInfo(
+    tupletype=namedtuple(
+        "hiddev_report_info",
+        ["report_type", "report_id", "num_fields"],
+        defaults=[0, 0, 0],
+    ),
+    fmt=struct.Struct("III"),
+)
 
-class hiddev_usage_ref(struxx):
-  _fields = "report_type;report_id;field_index;usage_index;usage_code;value"
-  _format = "I"*5+"i"
+hiddev_usage_ref = StructInfo(
+    tupletype=namedtuple(
+        "hiddev_usage_ref",
+        [
+            "report_type",
+            "report_id",
+            "field_index",
+            "usage_index",
+            "usage_code",
+            "value",
+        ],
+        defaults=[0, 0, 0, 0, 0, 0],
+    ),
+    fmt=struct.Struct("IIIIIi"),
+)
 
-class hiddev_collection_info(struxx):
-  _fields = "index;type;usage;level"
-  _format = "I"*4
-  def get_info(self, fd, index):
-    self.index = index
-    return self.ioctl(fd, HIDIOCGCOLLECTIONINFO)
 
-class hiddev_event(struxx):
-  _fields = "hid;value"
-  _format = "Hi"
+def encode_struct(structinfo, *args, **kwargs):
 
-IOCPARM_MASK = 0x7f
+    # retrieve the namedtuple type associated with the
+    # desired struct, and initialize a namedtuple
+    # with the arguments we got. this way, we
+    # don't have mess around with interpreting the
+    # arguments (especially kwargs) ourselves.
+    tupletype = structinfo.tupletype
+
+    try:
+        struct_data = tupletype(*args, **kwargs)
+    except TypeError as e:  # Something probably went wrong with the given arguments
+        raise e
+
+    # unpack the namedtuple into the arguments of struct.pack
+    # which will hand it all of the fields in the right order.
+    encoded_struct = structinfo.fmt.pack(*struct_data)
+
+    return encoded_struct
+
+
+def decode_struct(structinfo, encoded_struct):
+
+    raw_fields = structinfo.fmt.unpack(encoded_struct)
+
+    # use the raw fields to initialize the corresponding namedtuple.
+    # again, these will be in the right order for the initializer.
+    decoded_struct = structinfo.tupletype(*raw_fields)
+
+    return decoded_struct
+
+
+IOCPARM_MASK = 0x7F
 IOC_NONE = 0x20000000
 IOC_WRITE = 0x40000000
 IOC_READ = 0x80000000
 
-def FIX(x): return struct.unpack("i", struct.pack("I", x))[0]
 
-def _IO(x,y): return FIX(IOC_NONE|(ord(x)<<8)|y)
-def _IOR(x,y,t): return FIX(IOC_READ|((t&IOCPARM_MASK)<<16)|(ord(x)<<8)|y)
-def _IOW(x,y,t): return FIX(IOC_WRITE|((t&IOCPARM_MASK)<<16)|(ord(x)<<8)|y)
-def _IOWR(x,y,t): return FIX(IOC_READ|IOC_WRITE|((t&IOCPARM_MASK)<<16)|(ord(x)<<8)|y)
+class HIDDevice(object):
+    def __init__(self, fd):
+        self.fd = fd
 
-HIDIOCGVERSION         =_IOR('H', 0x01, struct.calcsize("I"))
-HIDIOCAPPLICATION      =_IO('H', 0x02)
-HIDIOCGDEVINFO         =_IOR('H', 0x03, len(hiddev_devinfo()))
-HIDIOCGSTRING          =_IOR('H', 0x04, len(hiddev_string_descriptor()))
-HIDIOCINITREPORT       =_IO('H', 0x05)
-def HIDIOCGNAME(buflen): return _IOR('H', 0x06, buflen)
-HIDIOCGREPORT          =_IOW('H', 0x07, len(hiddev_report_info()))
-HIDIOCSREPORT          =_IOW('H', 0x08, len(hiddev_report_info()))
-HIDIOCGREPORTINFO      =_IOWR('H', 0x09, len(hiddev_report_info()))
-HIDIOCGFIELDINFO       =_IOWR('H', 0x0A, len(hiddev_field_info()))
-HIDIOCGUSAGE           =_IOWR('H', 0x0B, len(hiddev_usage_ref()))
-HIDIOCSUSAGE           =_IOW('H', 0x0C, len(hiddev_usage_ref()))
-HIDIOCGUCODE           =_IOWR('H', 0x0D, len(hiddev_usage_ref()))
-HIDIOCGFLAG            =_IOR('H', 0x0E, struct.calcsize("I"))
-HIDIOCSFLAG            =_IOW('H', 0x0F, struct.calcsize("I"))
-HIDIOCGCOLLECTIONINDEX =_IOW('H', 0x10, len(hiddev_usage_ref()))
-HIDIOCGCOLLECTIONINFO  =_IOWR('H', 0x11, len(hiddev_collection_info()))
-def HIDIOCGPHYS(buflen): return _IOR('H', 0x12, buflen)
+    def do_ioctl(self, name, *args, **kwargs):
 
-HID_REPORT_TYPE_INPUT   =1
-HID_REPORT_TYPE_OUTPUT  =2
-HID_REPORT_TYPE_FEATURE =3
-HID_REPORT_TYPE_MIN     =1
-HID_REPORT_TYPE_MAX     =3
-HID_REPORT_ID_UNKNOWN =0xffffffff
-HID_REPORT_ID_FIRST   =0x00000100
-HID_REPORT_ID_NEXT    =0x00000200
-HID_REPORT_ID_MASK    =0x000000ff
-HID_REPORT_ID_MAX     =0x000000ff
+        # lookup structinfo
+        structinfo = ioctls[name].structinfo
+        encoded_struct = encode_struct(structinfo, *args, **kwargs)
 
-#def enum_reports(fd):
-#  for report_type in (HID_REPORT_TYPE_INPUT,
-#                      HID_REPORT_TYPE_OUTPUT,
-#                      HID_REPORT_TYPE_FEATURE):
-#    for i in range(HID_REPORT_ID_MAX+1):
-#      try:
-#        ri = hiddev_report_info()
-#        ri.report_type = report_type
-#        ri.report_id = i
-#        #print "trying", ri.__dict__
-#        ri.get_info(fd)
-#        print "%s(%s): %s fields" % ({1: 'input', 2:'output', 3:'feature'}.get(ri.report_type), ri.report_id, ri.num_fields)
-#        for field in range(ri.num_fields):
-#          fi = hiddev_field_info()
-#          fi.report_type = ri.report_type
-#          fi.report_id = ri.report_id
-#          fi.field_index = field
-#          fi.get_info(fd)
-#          print ", ".join(["%s:%s" % (key, fi.__dict__[key]) for key in fi.__dict__ if key not in ("report_type", "report_id", "_buffer") and fi.__dict__[key] ])
-#        #print report_info.__dict__
-#        print
-#      except IOError:
-#        pass
-#
-#
-#if __name__=="__main__":
-##  name = ""
-##  for name in globals():
-##    if name.startswith("HID"):
-##      if type(globals()[name]) == int:
-##        print name, "\t%x" % globals()[name]
-#
-#  f = open("/dev/usb/hiddev0", "r")
-#  tmp = uint()
-#  tmp.get_version(f)
-#  print "version 0x%x" % tmp.uint
-#  tmp.get_flags(f)
-#  print "flags 0x%x" % tmp.uint
-#  tmp.uint = 3
-#  tmp.set_flags(f)
-#  tmp.get_flags(f)
-#  print "flags 0x%x" % tmp.uint
-#
-#
-#  devinfo = hiddev_devinfo()
-#  devinfo.get(f)
-#  print "devinfo", devinfo.__dict__
-#
-#  enum_reports(f)
-#
-#def get_device_name(f):
-#  a = array.array('B', [0]*1024)
-#  fcntl.ioctl(f, HIDIOCGNAME(1024), a, True)
-#  print a
-#
-#def get_some_strings(f):
-#  for i in range(-10000, 10000):
-#    try:
-#      string = hiddev_string_descriptor()
-#      string.get_string(f, i)
-#      print "string %s: %s", string.index, repr(string.value)
-#    except IOError:
-#      pass
-#
-#
-#def show_all_collections(f):
-#  for i in range(256):
-#    try:
-#      collection_info = hiddev_collection_info()
-#      collection_info.get_info(f, i)
-#      print "coll %s" % i, collection_info.__dict__
-#      print """
-#idnex: %(index)s
-#type:  %(type)s
-#level: %(level)s
-#usage: 0x%(usage)x""" % collection_info.__dict__
-#    except IOError:
-#      pass
+        # turn this into an array so it becomes mutable
+        encoded_struct = array.array("B", encoded_struct)
+
+        # assemble request code
+        length = structinfo.fmt.size
+        request_code = (
+            ioctls[name].readwrite
+            | ((length & IOCPARM_MASK) << 16)
+            | (ord("H") << 8)
+            | ioctls[name].number
+        )
+
+        # TODO: do we need to include the signed/unsigned fix here?
+
+        # TODO: check return value and turn into an exception if necessary
+        fcntl.ioctl(self.fd, request_code, encoded_struct, True)
+
+        result = decode_struct(structinfo, encoded_struct)
+        return result
+
+    def get_version(self):
+        return self.do_ioctl("hidiocgversion")
+
+    def get_collection_info(self, index):
+        return self.do_ioctl("hidiocgcollectioninfo", index=index)
+
+    def get_report(self, report_type, report_id=0):
+        self.do_ioctl("hidiocgreport", report_type=report_type, report_id=report_id)
+
+    def get_usage(self, report_type, report_id, field_index, usage_index):
+        return self.do_ioctl(
+            "hidiocgusage",
+            report_type=report_type,
+            report_id=report_id,
+            field_index=field_index,
+            usage_index=usage_index,
+        )
+
+
+def FIX(x):
+    return struct.unpack("i", struct.pack("I", x))[0]
+
 
