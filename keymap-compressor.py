@@ -131,8 +131,69 @@ def test_bitstreams():
         #print()
         assert result == number
             
-    
-def compress(string):
+
+def compress(keylist):
+
+    buffer = BitWriter()
+
+    for string in keylist:
+
+        if string == "no-op":
+            # special encoding for no-op
+            # since we're using a special encoding for "-",
+            # the actual character "-" is free!
+            buffer.push_bits(ord("-") | (1 << 8), 9)
+            # since we're encoding the whole string at once,
+            # we do not need a string-end marker
+            
+        else:
+            for byte in string.encode("utf-8"):
+                if byte == ord("-"):
+                    buffer.push_bits(0b01, 2)
+                else:
+                    buffer.push_bits(byte | (1 << 8), 9)
+
+            # push end-of-string
+            buffer.push_bits(0b00, 2)
+
+    return buffer.get_output()
+
+def decompress(buffer, num_keys):
+
+    reader = BitReader(buffer)
+    keylist = []
+    current_string = bytearray()
+
+    while len(keylist) < num_keys:
+
+        is_quoted_byte = reader.read_bits(1)
+        if is_quoted_byte:
+            byte = reader.read_bits(8)
+
+            if byte == ord("-"):
+                # this represents the no-op string as a whole,
+                # and can thus not be included in another string.
+                # also, this means that it does not need the string 
+                # terminator, so we can push it directly
+                assert len(current_string) == 0
+
+                keylist.append("no-op")
+
+            else:
+                current_string.append(byte)
+
+        else:
+            if reader.read_bits(1) == 0:
+                # string terminator
+                keylist.append(current_string.decode("utf-8"))
+                current_string = bytearray()
+            else:
+                # "-" symbol
+                current_string.append(ord("-"))
+
+    return keylist
+                
+def compress_test_mode(string):
 
     buffer = BitWriter()
 
@@ -152,7 +213,7 @@ def compress(string):
 
     return buffer.get_output()
 
-def decompress(buffer):
+def decompress_test_mode(buffer):
 
     reader = BitReader(buffer)
     result = bytearray()
@@ -184,6 +245,15 @@ def turn_keymap_into_test_string(keymap):
 
     return ";".join(actions) + ";"
 
+def turn_keymap_into_test_keylist(keymap):
+
+    actions = []
+
+    for (action, keys) in keymap.items():
+        actions.extend([action]*len(keys))
+
+    return actions
+
 if __name__ == "__main__":
 
     print("testing...")
@@ -193,7 +263,11 @@ if __name__ == "__main__":
     for (name, keymap) in english_stenotype.KEYMAPS.items():
 
         string = turn_keymap_into_test_string(keymap)
-        compressed_length = len(compress(string))
-        assert decompress(compress(string)) == string
+        keylist = turn_keymap_into_test_keylist(keymap)
+        compressed_length = len(compress(keylist))
+        assert decompress_test_mode(compress_test_mode(string)) == string
         normal_length = len(string)
         print("{:10}: {:4} bytes ({:4} uncompressed, ratio: {:5.4f})".format(name, compressed_length, normal_length, compressed_length/normal_length))
+
+        # test the actual compression
+        assert decompress(compress(keylist), len(keylist)) == keylist
