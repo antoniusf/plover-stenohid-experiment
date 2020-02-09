@@ -15,6 +15,7 @@ import select
 import struct
 
 from .find_dev import wait_for_device
+from . import hiddev
 
 from plover import log
 from plover.machine.base import ThreadedStenotypeBase
@@ -71,6 +72,61 @@ class DataHandler(object):
                 self._stroke.clear()
 
 
+class Decoder(object):
+    """Presents a simple interface over a bytes-like object that allows sequential reading and decoding of data."""
+
+    format_u8 = struct.Struct("<B")
+    format_u16 = struct.Struct("<H")
+    format_u32 = struct.Struct("<I")
+
+    def __init__(self, buffer):
+
+        self.buffer = buffer
+        self.position = 0
+
+    def read_struct(self, struct_object):
+
+        result = struct_object.unpack_from(self.buffer, offset=self.position)
+        self.position += struct_object.size
+        return result
+
+    def read_fmt(self, fmt):
+
+        result = struct.unpack_from(fmt, self.buffer, offset=self.position)
+        self.position += struct.calcsize(fmt)
+        return result
+
+    def read_u8(self):
+        return self.read_struct(self.format_u8)
+
+    def read_u16(self):
+        return self.read_struct(self.format_u16)
+
+    def read_u32(self):
+        return self.read_struct(self.format_u32)
+
+class DeviceInfo(object):
+
+    def __init__(self, version):
+
+        self.version = version
+        self.keynames = []
+
+    @classmethod
+    def parse_from_binary(cls, data):
+        """parse the device info out from the binary format, given as the bytes-like object data"""
+
+        decoder = Decoder(data)
+        # version (major,minor); number of 64-bit blocks to request
+        version_major, version_minor, num_blocks = decoder.read_fmt("<BBB")
+
+        assert version_major == 0
+        assert version_minor == 1
+
+        # then, read the keymap info.
+        # first, number of keys and base names:
+        num_keys = decoder.read_u8
+
 class QMK(ThreadedStenotypeBase):
 
     # key layout copied from gemini pr, it is the exact same
@@ -98,12 +154,22 @@ class QMK(ThreadedStenotypeBase):
     def _connect(self):
         connected = False
         self._initializing()
-        device = wait_for_device(self.finished_notify_recv)
+        #device = wait_for_device(self.finished_notify_recv)
+        device = None
 
         if device:
             self._machine = device
             self._ready()
 
+            print("Trying to retrieve the feature report....")
+            device = hiddev.HIDDevice(device)
+            device.get_report(hiddev.HID_REPORT_TYPE_FEATURE, 0)
+            values = []
+            for i in range(0, 64):
+                values.append(device.get_usage(hiddev.HID_REPORT_TYPE_FEATURE, 0, 0, i).value)
+            print(bytes(values[:values.index(0)]).decode("ascii"))
+
+        self._ready()
         return connected
 
     #def _reconnect(self):
@@ -122,6 +188,7 @@ class QMK(ThreadedStenotypeBase):
 
         self._connect()
 
+        print(self.keymap.get_bindings())
         while not self.finished.isSet():
             # TODO: self.finished.isSet should only be true if self._connect() returned an actual fd,
             # since the only way of returning from wait_for_device without an fd is when we get the finished

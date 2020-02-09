@@ -2,7 +2,7 @@
 #
 # This code is based on work by Dima Tisnek, released here: https://github.com/dimaqq/recipes/blob/master/hiddev.py .
 # It was almost completely rewritten by me (Antonius Frie) in January of 2020; the only parts of the original code
-# that remain untouched are the four IOC constants, as well as the FIX function. This code still has some similarities to the
+# that remain untouched are the IOC and HID constants, as well as the FIX function. This code still has some similarities to the
 # original, but these are almost exclusively due to the fact that both use the same API.
 
 import struct, array, fcntl
@@ -190,3 +190,41 @@ def FIX(x):
     return struct.unpack("i", struct.pack("I", x))[0]
 
 
+IOCInfo = namedtuple("IOCInfo", ["number", "readwrite", "structinfo"])
+
+ioctls = {
+    "iocgvhidersion": IOCInfo(0x01, IOC_READ, hiddev_u32),
+    "hidiocapplication": IOCInfo(0x02, IOC_NONE, None),
+    "hidiocgdevinfo": IOCInfo(0x03, IOC_READ, hiddev_devinfo),
+    "hidiocgstring": IOCInfo(0x04, IOC_READ, hiddev_string_descriptor),
+    "hidiocinitreport": IOCInfo(0x05, IOC_NONE, None),
+    "hidiocgname": IOCInfo(0x06, IOC_READ, hiddev_buffer),
+    "hidiocgreport": IOCInfo(0x07, IOC_WRITE, hiddev_report_info),
+    "hidiocsreport": IOCInfo(0x08, IOC_WRITE, hiddev_report_info),
+    "hidiocgreportinfo": IOCInfo(0x09, IOC_READ | IOC_WRITE, hiddev_report_info),
+    # "hidiocgfieldinfo": IOCInfo(0x0A, IOC_READ | IOC_WRITE, hiddev_field_info),
+    "hidiocgusage": IOCInfo(0x0B, IOC_READ | IOC_WRITE, hiddev_usage_ref),
+    "hidiocsusage": IOCInfo(0x0C, IOC_WRITE, hiddev_usage_ref),
+    "hidiocgucode": IOCInfo(0x0D, IOC_READ | IOC_WRITE, hiddev_usage_ref),
+    "hidiocgflag": IOCInfo(0x0E, IOC_READ, hiddev_u32),
+    "hidiocsflag": IOCInfo(0x0F, IOC_WRITE, hiddev_u32),
+    "hidiocgcollectionindex": IOCInfo(0x10, IOC_WRITE, hiddev_usage_ref),
+    "hidiocgcollectioninfo": IOCInfo(
+        0x11, IOC_READ | IOC_WRITE, hiddev_collection_info
+    ),
+    "hidiocgphys": IOCInfo(0x12, IOC_READ, hiddev_buffer),
+    # "hidiocgusages": IOCInfo(0x13, IOC_READ | IOC_WRITE, hiddev_usage_ref_multi),
+    # "hidiocsusages": IOCInfo(0x14, IOC_WRITE, hiddev_usage_ref_multi),
+}
+
+
+HID_REPORT_TYPE_INPUT = 1
+HID_REPORT_TYPE_OUTPUT = 2
+HID_REPORT_TYPE_FEATURE = 3
+HID_REPORT_TYPE_MIN = 1
+HID_REPORT_TYPE_MAX = 3
+HID_REPORT_ID_UNKNOWN = 0xFFFFFFFF
+HID_REPORT_ID_FIRST = 0x00000100
+HID_REPORT_ID_NEXT = 0x00000200
+HID_REPORT_ID_MASK = 0x000000FF
+HID_REPORT_ID_MAX = 0x000000FF
