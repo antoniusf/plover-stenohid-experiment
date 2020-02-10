@@ -96,9 +96,9 @@ solution to this would be to only fall back onto the pre-defined
 machine type keymap for initialization of the device-specific keymap,
 and after that allow arbitrary customization. Like this:
 
-device keymap: maps device buttons to keys of a pre-defined machine
-type
-system keymap: maps keys of the machine type to actions in the system
+*device keymap*: maps device buttons to keys of a pre-defined machine
+type  
+*system keymap*: maps keys of the machine type to actions in the system
 
 On setup, we compose these two keymaps (ie take each button first
 through the device keymap, and then through the system keymap) to
