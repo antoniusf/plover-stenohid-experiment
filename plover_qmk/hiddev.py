@@ -98,7 +98,6 @@ hiddev_usage_ref = StructInfo(
     fmt=struct.Struct("IIIIIi"),
 )
 
-
 def encode_struct(structinfo, *args, **kwargs):
 
     # retrieve the namedtuple type associated with the
@@ -135,6 +134,20 @@ IOCPARM_MASK = 0x7F
 IOC_NONE = 0x20000000
 IOC_WRITE = 0x40000000
 IOC_READ = 0x80000000
+IOC_READWRITE = IOC_READ | IOC_WRITE
+
+IoctlInfo = namedtuple("IoctlInfo", ["structinfo", "readwrite", "number"])
+
+ioctls = {
+        "hidiocgversion": IoctlInfo(
+            structinfo=hiddev_u32,
+            readwrite=IOC_READ,
+            number=1),
+        "hidiocgcollectioninfo": IoctlInfo(
+            structinfo=hiddev_collection_info,
+            readwrite=IOC_READWRITE,
+            number=17),
+        }
 
 
 class HIDDevice(object):
