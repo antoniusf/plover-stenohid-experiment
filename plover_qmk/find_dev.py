@@ -72,7 +72,7 @@ def check_device(device):
 
     log.debug("... usage is 0x{:04x}".format(info.usage))
 
-    if info.usage != 0xff020001:
+    if info.usage != 0xff504c56:
         os.close(fd)
         log.debug("... no")
         return None

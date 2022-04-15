@@ -19,12 +19,10 @@ from .find_dev import wait_for_device
 from plover import log
 from plover.machine.base import ThreadedStenotypeBase
 
-STENO_KEY_CHART = ("Fn", "#1", "#2", "#3", "#4", "#5", "#6", "S1-",
-                   "S2-", "T-", "K-", "P-", "W-", "H-", "R-", "A-",
-                   "O-", "*1", "*2", "res1", "res2", "pwr", "*3", "*4",
-                   "-E", "-U", "-F", "-R", "-P", "-B", "-L", "-G",
-                   "-T", "-S", "-D", "#7", "#8", "#9", "#A", "#B",
-                   "#C", "-Z")
+STENO_KEY_CHART = ("#1",  "#2", "#3", "#4", "#5", "#6", "#7", "#8", "#9", "#A", "#B", "#C",
+                   "X1", "S1-", "T-", "P-", "H-", "*1", "*3", "-F", "-P", "-L", "-T", "-D",
+                   "X2", "S2-", "K-", "W-", "R-", "*2", "*4", "-R", "-B", "-G", "-S", "-Z",
+                                 "X3", "A-", "O-",             "-E", "-U", "X4")
 
 packet_struct = struct.Struct("Ii")
 
@@ -34,8 +32,9 @@ def parse_packet(packet):
     usage_page = usage >> 16
     usage = usage & 0xFF
 
-    assert usage_page == 0xff02 # TODO: this probably shouldn't be an assert (and we should check the usage range, too)
-    key_index = usage - 8 # (usages start at 8, compare usb_descriptor.c in QMK)
+    assert usage_page == 0x0a # TODO: this probably shouldn't be an assert (and we should check the usage range, too)
+    #to do: ask dnaq to fix this, this isn't spec conform
+    key_index = (7 -  usage % 8) + usage//8 * 8
     return key_index, value
 
 # 0xFEED is for qmk
